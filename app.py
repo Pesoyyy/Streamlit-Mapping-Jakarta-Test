@@ -198,25 +198,35 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
 # VISUALISASI PETA DENGAN PYDECK - DIPERBAIKI
 # =============================================================================
 def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, performance_mode=False):
-    """Buat peta interaktif dengan PyDeck - SELALU gunakan ScatterplotLayer untuk klik detail"""
+    """Buat peta interaktif dengan PyDeck - FIXED untuk peta hitam"""
     
     # Gabungkan data berdasarkan layer yang aktif
     layers_data = []
     
     if show_layers['match'] and not green_data.empty:
-        layers_data.append(green_data)
+        green_data_copy = green_data.copy()
+        green_data_copy['layer'] = 'match'
+        layers_data.append(green_data_copy)
+        
     if show_layers['esb'] and not orange_data.empty:
-        layers_data.append(orange_data)
+        orange_data_copy = orange_data.copy()
+        orange_data_copy['layer'] = 'esb'
+        layers_data.append(orange_data_copy)
+        
     if show_layers['jakarta'] and not blue_data.empty:
-        layers_data.append(blue_data)
+        blue_data_copy = blue_data.copy()
+        blue_data_copy['layer'] = 'jakarta'
+        layers_data.append(blue_data_copy)
     
     if not layers_data:
+        st.warning("⚠️ Tidak ada data yang ditampilkan. Silakan pilih layer di sidebar.")
         return None
     
     try:
         combined_data = pd.concat(layers_data, ignore_index=True)
         
         if combined_data.empty:
+            st.warning("⚠️ Tidak ada data yang valid untuk ditampilkan.")
             return None
             
         # Pastikan kolom yang diperlukan ada
@@ -235,20 +245,18 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             radius_max_pixels = 4
             opacity = 0.6
             radius_scale = 3
-            st.info(f"🚀 Mode Performa - Menampilkan {total_points:,} titik dengan optimasi")
         else:
             # Mode normal untuk data kecil
             radius_min_pixels = 2
             radius_max_pixels = 6
             opacity = 0.8
             radius_scale = 4
-            st.info(f"🎯 Mode Normal - Menampilkan {total_points:,} titik")
         
-        # SELALU gunakan ScatterplotLayer agar bisa klik detail
+        # PERBAIKAN UTAMA: Gunakan ScatterplotLayer dengan konfigurasi yang benar
         layer = pdk.Layer(
             "ScatterplotLayer",
             combined_data,
-            pickable=True,  # INI YANG PENTING: harus True untuk bisa klik
+            pickable=True,
             opacity=opacity,
             stroked=True,
             filled=True,
@@ -257,7 +265,6 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             radius_max_pixels=radius_max_pixels,
             line_width_min_pixels=0.5,
             get_position=['lon', 'lat'],
-            get_radius=50,
             get_fill_color='warna',
             get_line_color=[0, 0, 0, 128],
             auto_highlight=True,
@@ -291,21 +298,39 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             </div>
             """,
             "style": {
-                "backgroundColor": "transparent",
-                "border": "none"
+                "backgroundColor": "steelblue",
+                "color": "white"
             }
         }
         
-        # Buat peta
+        # PERBAIKAN PENTING: Konfigurasi view state dan map style
+        view_state = pdk.ViewState(
+            **Config.INITIAL_VIEW_STATE.to_json()
+        )
+        
+        # PERBAIKAN: Gunakan map style yang kompatibel dengan PyDeck
+        # PyDeck mendukung: 'light', 'dark', 'road', 'satellite', 'dark_no_labels', etc.
+        compatible_map_styles = {
+            "light": "light",
+            "dark": "dark", 
+            "satellite": "satellite",
+            "road": "road",
+            "outdoors": "light"  # Fallback untuk outdoors
+        }
+        
+        selected_map_style = compatible_map_styles.get(map_style, "light")
+        
+        # Buat peta dengan konfigurasi yang diperbaiki
         deck = pdk.Deck(
             layers=[layer],
-            initial_view_state=Config.INITIAL_VIEW_STATE,
+            initial_view_state=view_state,
             tooltip=tooltip,
-            map_style=map_style,
+            map_style=selected_map_style,
             parameters={
                 "pickable": True,
                 "doubleClickZoom": True,
-                "scrollZoom": True
+                "scrollZoom": True,
+                "dragRotate": False
             }
         )
         
@@ -475,11 +500,11 @@ def main():
         'jakarta': st.sidebar.checkbox("🔵 Hanya Jakarta (Biru)", True)
     }
     
-    # Pengaturan peta
+    # Pengaturan peta - DIPERBAIKI
     st.sidebar.subheader("🗺️ Pengaturan Peta")
     map_style = st.sidebar.selectbox(
         "Style Peta:",
-        ["light", "dark", "satellite", "road", "outdoors"]
+        ["light", "dark", "satellite", "road"]
     )
     
     # PERBAIKAN: Tambahkan toggle untuk mode performa
@@ -488,14 +513,6 @@ def main():
         value=False,
         help="Mengurangi detail visual untuk meningkatkan performa saat menampilkan data besar"
     )
-    
-    style_mapping = {
-        "light": "mapbox://styles/mapbox/light-v10",
-        "dark": "mapbox://styles/mapbox/dark-v10", 
-        "satellite": "mapbox://styles/mapbox/satellite-v9",
-        "road": "mapbox://styles/mapbox/streets-v11",
-        "outdoors": "mapbox://styles/mapbox/outdoors-v11"
-    }
     
     # Load data
     if st.sidebar.button("🚀 Muat SEMUA Data & Generate Visualisasi", type="primary"):
@@ -570,14 +587,14 @@ def main():
     else:
         st.info(f"🎯 **Mode Normal** - Menampilkan {total_points:,} titik data. Klik marker untuk detail.")
     
-    # Buat dan tampilkan peta - DIPERBAIKI: selalu ScatterplotLayer
+    # Buat dan tampilkan peta - DIPERBAIKI
     deck_map = create_deck_map(
         st.session_state.green_data,
         st.session_state.orange_data, 
         st.session_state.blue_data,
         show_layers,
-        style_mapping[map_style],
-        performance_mode  # Parameter baru untuk mode performa
+        map_style,  # Langsung gunakan string style
+        performance_mode
     )
     
     if deck_map:
