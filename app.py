@@ -30,6 +30,13 @@ class Config:
         pitch=0,
         bearing=0
     )
+    
+    # File paths untuk dataset default
+    DEFAULT_FILES = {
+        'matched': 'esb_jakarta_matched_comprehensive.csv',
+        'esb': 'restaurant_esb_baru.csv', 
+        'jakarta': 'restaurants_jakarta.csv'
+    }
 
 def validate_coordinates(lat, lon):
     """Validasi koordinat untuk memastikan dalam range Jakarta"""
@@ -64,16 +71,30 @@ def clean_coordinates(df, lat_col, lon_col, dataset_name):
     return df_valid
 
 # =============================================================================
-# LOAD DATA DENGAN CACHING
+# LOAD DATA DENGAN CACHING - DIPERBAIKI UNTUK AUTO LOAD
 # =============================================================================
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_and_process_data(matched_file, esb_file, jakarta_file):
     """Load dan proses SEMUA data tanpa sampling"""
     
     try:
-        df_matched = pd.read_csv(matched_file)
-        df_esb_full = pd.read_csv(esb_file)
-        df_jakarta_full = pd.read_csv(jakarta_file)
+        # Handle both file upload objects and file paths
+        if hasattr(matched_file, 'read'):
+            # Ini adalah file upload object
+            df_matched = pd.read_csv(matched_file)
+        else:
+            # Ini adalah file path
+            df_matched = pd.read_csv(matched_file)
+            
+        if hasattr(esb_file, 'read'):
+            df_esb_full = pd.read_csv(esb_file)
+        else:
+            df_esb_full = pd.read_csv(esb_file)
+            
+        if hasattr(jakarta_file, 'read'):
+            df_jakarta_full = pd.read_csv(jakarta_file)
+        else:
+            df_jakarta_full = pd.read_csv(jakarta_file)
         
         st.info(f"📥 Data loaded - Matched: {len(df_matched):,}, ESB: {len(df_esb_full):,}, Jakarta: {len(df_jakarta_full):,}")
         
@@ -134,7 +155,7 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
                 green_data['match_confidence'] = df_matched_clean['match_confidence']
                 
             green_data['kategori'] = 'Match'
-            green_data['warna'] = [[0, 255, 0, 200] for _ in range(len(green_data))]  # Increased opacity
+            green_data['warna'] = [[0, 255, 0, 200] for _ in range(len(green_data))]
             
         except Exception as e:
             st.error(f"❌ Error processing green data: {e}")
@@ -161,7 +182,7 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
                 orange_data['cityName'] = esb_unmatched['cityName']
                 
             orange_data['kategori'] = 'Hanya ESB'
-            orange_data['warna'] = [[255, 165, 0, 200] for _ in range(len(orange_data))]  # Increased opacity
+            orange_data['warna'] = [[255, 165, 0, 200] for _ in range(len(orange_data))]
             
         except Exception as e:
             st.error(f"❌ Error processing orange data: {e}")
@@ -186,13 +207,56 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
             blue_data['cabang'] = ''
             blue_data['cityName'] = ''
             blue_data['kategori'] = 'Hanya Jakarta'
-            blue_data['warna'] = [[0, 0, 255, 200] for _ in range(len(blue_data))]  # Increased opacity
+            blue_data['warna'] = [[0, 0, 255, 200] for _ in range(len(blue_data))]
             
         except Exception as e:
             st.error(f"❌ Error processing blue data: {e}")
     
     st.success(f"✅ Data processing complete - Green: {len(green_data):,}, Orange: {len(orange_data):,}, Blue: {len(blue_data):,}")
     return green_data, orange_data, blue_data
+
+# =============================================================================
+# FUNGSI UNTUK CHECK FILE EXIST DAN AUTO LOAD
+# =============================================================================
+def check_default_files():
+    """Cek apakah file default ada di repository"""
+    available_files = {}
+    for file_type, file_path in Config.DEFAULT_FILES.items():
+        if os.path.exists(file_path):
+            available_files[file_type] = file_path
+            st.sidebar.success(f"✅ {file_type.upper()} file found: {file_path}")
+        else:
+            st.sidebar.warning(f"⚠️ {file_type.upper()} file not found: {file_path}")
+    return available_files
+
+def auto_load_data():
+    """Auto load data dari file default jika ada"""
+    available_files = check_default_files()
+    
+    if len(available_files) == 3:
+        # Semua file tersedia, auto load
+        try:
+            with st.spinner("🔄 Auto loading dataset dari repository..."):
+                green_data, orange_data, blue_data = load_and_process_data(
+                    available_files['matched'],
+                    available_files['esb'],
+                    available_files['jakarta']
+                )
+                
+                st.session_state.green_data = green_data
+                st.session_state.orange_data = orange_data
+                st.session_state.blue_data = blue_data
+                st.session_state.data_loaded = True
+                st.session_state.auto_loaded = True
+                
+                st.success(f"✅ Auto load berhasil! Total: {len(green_data) + len(orange_data) + len(blue_data):,} records")
+                return True
+        except Exception as e:
+            st.error(f"❌ Gagal auto load: {str(e)}")
+            return False
+    else:
+        st.sidebar.info("📁 Upload file data atau pastikan file dataset ada di repository")
+        return False
 
 # =============================================================================
 # VISUALISASI PETA DENGAN PYDECK - MARKER LEBIH BESAR
@@ -241,18 +305,18 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
         # PERBAIKAN BESAR: Ukuran marker yang lebih besar dan mudah diklik
         if performance_mode or total_points > 5000:
             # Mode performa untuk data besar - tetap lebih besar dari sebelumnya
-            radius_min_pixels = 3      # Dinaikkan dari 1
-            radius_max_pixels = 8      # Dinaikkan dari 4
-            opacity = 0.7              # Dinaikkan dari 0.6
-            radius_scale = 5           # Dinaikkan dari 3
-            get_radius = 80            # Dinaikkan dari 50
+            radius_min_pixels = 3
+            radius_max_pixels = 8
+            opacity = 0.7
+            radius_scale = 5
+            get_radius = 80
         else:
             # Mode normal untuk data kecil - marker lebih besar dan mudah diklik
-            radius_min_pixels = 5      # Dinaikkan dari 2
-            radius_max_pixels = 12     # Dinaikkan dari 6
-            opacity = 0.9              # Dinaikkan dari 0.8
-            radius_scale = 8           # Dinaikkan dari 4
-            get_radius = 100           # Dinaikkan dari 50
+            radius_min_pixels = 5
+            radius_max_pixels = 12
+            opacity = 0.9
+            radius_scale = 8
+            get_radius = 100
         
         # PERBAIKAN UTAMA: Gunakan ScatterplotLayer dengan marker lebih besar
         layer = pdk.Layer(
@@ -265,13 +329,13 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             radius_scale=radius_scale,
             radius_min_pixels=radius_min_pixels,
             radius_max_pixels=radius_max_pixels,
-            line_width_min_pixels=1.5,  # Lebih tebal dari sebelumnya (0.5)
+            line_width_min_pixels=1.5,
             get_position=['lon', 'lat'],
-            get_radius=get_radius,      # Radius yang lebih besar
+            get_radius=get_radius,
             get_fill_color='warna',
-            get_line_color=[0, 0, 0, 200],  # Garis tepi lebih gelap dan tebal
+            get_line_color=[0, 0, 0, 200],
             auto_highlight=True,
-            highlight_color=[255, 255, 255, 255],  # Warna highlight saat hover
+            highlight_color=[255, 255, 255, 255],
         )
         
         # Tooltip yang informatif
@@ -288,7 +352,7 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
                 max-width: 350px;
                 box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
             ">
-                <b style="font-size: 16px; color: {kategori_color};">{nama_restoran}</b><br/>
+                <b style="font-size: 16px;">{nama_restoran}</b><br/>
                 <hr style="margin: 8px 0; border: 1px solid #eee;">
                 <b>Kategori:</b> {kategori}<br/>
                 <b>Koordinat:</b> [{lat:.4f}, {lon:.4f}]<br/>
@@ -462,11 +526,11 @@ def create_comprehensive_statistics(green_data, orange_data, blue_data):
     return fig_pie, fig_bar, fig_similarity, fig_top_restaurants, total_green, total_orange, total_blue, total_all
 
 # =============================================================================
-# MAIN APP - DIPERBAIKI DENGAN MARKER BESAR
+# MAIN APP - DIPERBAIKI DENGAN AUTO LOAD
 # =============================================================================
 def main():
     st.title("🗺️ Pinpoint Map Restoran Jakarta - Full Data Analysis")
-    st.markdown("Visualisasi interaktif data restoran Jakarta dengan **SEMUA DATA** - Marker lebih besar & mudah diklik!")
+    st.markdown("Visualisasi interaktif data restoran Jakarta dengan **SEMUA DATA** - Auto Load Dataset!")
     
     # Inisialisasi session state
     if 'data_loaded' not in st.session_state:
@@ -477,26 +541,50 @@ def main():
         st.session_state.orange_data = pd.DataFrame()
     if 'blue_data' not in st.session_state:
         st.session_state.blue_data = pd.DataFrame()
+    if 'auto_loaded' not in st.session_state:
+        st.session_state.auto_loaded = False
     
     # Sidebar untuk kontrol
     st.sidebar.header("🎛️ Kontrol Visualisasi")
     
-    # File uploader atau path input
+    # File uploader atau path input - DIPERBAIKI
     st.sidebar.subheader("📁 Input Data")
+    
+    # Cek file default terlebih dahulu
+    available_files = check_default_files()
+    
     data_source = st.sidebar.radio(
         "Sumber Data:",
-        ["File Upload", "Path Local"]
+        ["Auto Load dari Repository", "File Upload", "Custom Path"]
     )
     
     matched_file = None
     esb_file = None
     jakarta_file = None
     
-    if data_source == "File Upload":
+    if data_source == "Auto Load dari Repository":
+        if len(available_files) == 3:
+            st.sidebar.success("✅ Dataset default tersedia di repository")
+            matched_file = available_files['matched']
+            esb_file = available_files['esb']
+            jakarta_file = available_files['jakarta']
+            
+            # Auto load jika belum diload
+            if not st.session_state.get('auto_loaded', False):
+                if auto_load_data():
+                    st.session_state.auto_loaded = True
+        else:
+            st.sidebar.error("❌ Dataset default tidak lengkap di repository")
+            st.sidebar.info("Gunakan opsi File Upload atau pastikan file dataset ada di repo")
+            
+    elif data_source == "File Upload":
+        st.sidebar.info("📤 Upload file CSV dataset")
         matched_file = st.sidebar.file_uploader("Data Matched", type=['csv'], key="matched")
         esb_file = st.sidebar.file_uploader("Data ESB", type=['csv'], key="esb")
         jakarta_file = st.sidebar.file_uploader("Data Jakarta", type=['csv'], key="jakarta")
-    else:
+        
+    else:  # Custom Path
+        st.sidebar.info("📍 Masukkan path file dataset")
         matched_file = st.sidebar.text_input("Path Data Matched", "esb_jakarta_matched_comprehensive.csv")
         esb_file = st.sidebar.text_input("Path Data ESB", "restaurant_esb_baru.csv")
         jakarta_file = st.sidebar.text_input("Path Data Jakarta", "restaurants_jakarta.csv")
@@ -509,20 +597,20 @@ def main():
         'jakarta': st.sidebar.checkbox("🔵 Hanya Jakarta (Biru)", True)
     }
     
-    # Pengaturan peta - DIPERBAIKI
+    # Pengaturan peta
     st.sidebar.subheader("🗺️ Pengaturan Peta")
     map_style = st.sidebar.selectbox(
         "Style Peta:",
         ["light", "dark", "satellite", "road"]
     )
     
-    # PERBAIKAN: Tambahkan kontrol ukuran marker
+    # Kontrol ukuran marker
     st.sidebar.subheader("🎯 Ukuran Marker")
     marker_size = st.sidebar.slider(
         "Ukuran Marker:",
         min_value=1.0,
         max_value=3.0,
-        value=1.5,  # Default 50% lebih besar
+        value=1.5,
         step=0.1,
         help="Atur ukuran marker untuk memudahkan klik"
     )
@@ -533,13 +621,13 @@ def main():
         help="Mengurangi detail visual untuk meningkatkan performa saat menampilkan data besar"
     )
     
-    # Load data
-    if st.sidebar.button("🚀 Muat SEMUA Data & Generate Visualisasi", type="primary"):
+    # Load data manual untuk opsi non-auto
+    if data_source != "Auto Load dari Repository" and st.sidebar.button("🚀 Muat Data & Generate Visualisasi", type="primary"):
         if not all([matched_file, esb_file, jakarta_file]):
             st.error("❌ Harap lengkapi semua file data!")
             return
             
-        with st.spinner("🔄 Memuat dan memproses SEMUA data..."):
+        with st.spinner("🔄 Memuat dan memproses data..."):
             try:
                 green_data, orange_data, blue_data = load_and_process_data(
                     matched_file, esb_file, jakarta_file
@@ -550,7 +638,7 @@ def main():
                 st.session_state.blue_data = blue_data
                 st.session_state.data_loaded = True
                 
-                st.success(f"✅ SEMUA data berhasil dimuat! Total: {len(green_data) + len(orange_data) + len(blue_data):,} records")
+                st.success(f"✅ Data berhasil dimuat! Total: {len(green_data) + len(orange_data) + len(blue_data):,} records")
                 
             except Exception as e:
                 st.error(f"❌ Error memuat data: {str(e)}")
@@ -558,12 +646,16 @@ def main():
                 st.error(f"Detail error: {traceback.format_exc()}")
                 return
     
+    # Tampilkan data jika sudah loaded
     if not st.session_state.get('data_loaded', False):
-        st.info("👆 Silakan upload file data dan klik 'Muat SEMUA Data & Generate Visualisasi' di sidebar untuk memulai.")
+        if data_source == "Auto Load dari Repository" and not available_files:
+            st.info("❌ Dataset default tidak ditemukan. Silakan pilih opsi lain atau pastikan file dataset ada di repository.")
+        else:
+            st.info("👆 Pilih sumber data dan muat data untuk memulai visualisasi.")
         return
     
     # Tampilkan statistik
-    st.header("📊 Analisis Statistik Komprehensif (Semua Data)")
+    st.header("📊 Analisis Statistik Komprehensif")
     
     fig_pie, fig_bar, fig_similarity, fig_top_restaurants, total_green, total_orange, total_blue, total_all = create_comprehensive_statistics(
         st.session_state.green_data, 
@@ -597,18 +689,17 @@ def main():
     with col4:
         st.plotly_chart(fig_top_restaurants, use_container_width=True)
     
-    # Tampilkan peta - DIPERBAIKI DENGAN MARKER BESAR
-    st.header("🗺️ Peta Interaktif (Semua Data)")
+    # Tampilkan peta
+    st.header("🗺️ Peta Interaktif")
     
     total_points = len(st.session_state.green_data) + len(st.session_state.orange_data) + len(st.session_state.blue_data)
     
-    # Informasi tentang ukuran marker
-    st.info(f"🎯 **Marker diperbesar {marker_size}x** - Menampilkan {total_points:,} titik data. Klik marker untuk detail.")
+    st.info(f"🎯 **Menampilkan {total_points:,} titik data**. Klik marker untuk detail.")
     
     if performance_mode:
         st.warning("🚀 **Mode Performa Aktif** - Beberapa optimasi diterapkan untuk data besar.")
     
-    # Buat dan tampilkan peta - DIPERBAIKI dengan ukuran marker yang disesuaikan
+    # Buat dan tampilkan peta
     deck_map = create_deck_map(
         st.session_state.green_data,
         st.session_state.orange_data, 
@@ -621,7 +712,7 @@ def main():
     if deck_map:
         st.pydeck_chart(deck_map, use_container_width=True)
         
-        # Legenda yang lebih informatif
+        # Legenda
         st.markdown(f"""
         ### 🎯 Legenda & Cara Penggunaan
         
@@ -631,23 +722,21 @@ def main():
         - 🔵 **Biru**: Restoran yang hanya ada di dataset Jakarta - **{len(st.session_state.blue_data):,}** data
         
         **Cara Interaksi:**
-        - 🖱️ **Klik marker** (sekarang lebih besar!) untuk melihat detail informasi restoran
+        - 🖱️ **Klik marker** untuk melihat detail informasi restoran
         - 🔍 **Zoom** dengan scroll mouse
         - 🗺️ **Geser** dengan drag mouse
         - 👁️ **Sembunyikan/tampilkan layer** menggunakan kontrol di sidebar
-        - 🎯 **Atur ukuran marker** dengan slider di sidebar
         
         **Statistik:**
         - 📊 Total titik data: **{total_points:,}**
         - 🚀 Mode: **{'Performansi' if performance_mode else 'Normal'}**
         - 🗺️ Style peta: **{map_style}**
-        - 🎯 Ukuran marker: **{marker_size}x**
         """)
     else:
         st.error("❌ Gagal membuat peta. Pastikan data memiliki koordinat yang valid.")
     
     # Data tables
-    st.header("📋 Detail Data (Semua Data)")
+    st.header("📋 Detail Data")
     
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Summary", "✅ Data Match", "🟠 Hanya ESB", "🔵 Hanya Jakarta"])
     
@@ -705,7 +794,6 @@ def main():
     - 👁️ Ditampilkan: {total_displayed:,}
     - 🚀 Mode: {'Performansi' if performance_mode else 'Normal'}
     - 🗺️ Style: {map_style}
-    - 🎯 Marker: {marker_size}x
     """)
 
 if __name__ == "__main__":
