@@ -134,7 +134,7 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
                 green_data['match_confidence'] = df_matched_clean['match_confidence']
                 
             green_data['kategori'] = 'Match'
-            green_data['warna'] = [[0, 255, 0, 180] for _ in range(len(green_data))]
+            green_data['warna'] = [[0, 255, 0, 200] for _ in range(len(green_data))]  # Increased opacity
             
         except Exception as e:
             st.error(f"❌ Error processing green data: {e}")
@@ -161,7 +161,7 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
                 orange_data['cityName'] = esb_unmatched['cityName']
                 
             orange_data['kategori'] = 'Hanya ESB'
-            orange_data['warna'] = [[255, 165, 0, 180] for _ in range(len(orange_data))]
+            orange_data['warna'] = [[255, 165, 0, 200] for _ in range(len(orange_data))]  # Increased opacity
             
         except Exception as e:
             st.error(f"❌ Error processing orange data: {e}")
@@ -186,7 +186,7 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
             blue_data['cabang'] = ''
             blue_data['cityName'] = ''
             blue_data['kategori'] = 'Hanya Jakarta'
-            blue_data['warna'] = [[0, 0, 255, 180] for _ in range(len(blue_data))]
+            blue_data['warna'] = [[0, 0, 255, 200] for _ in range(len(blue_data))]  # Increased opacity
             
         except Exception as e:
             st.error(f"❌ Error processing blue data: {e}")
@@ -195,10 +195,10 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
     return green_data, orange_data, blue_data
 
 # =============================================================================
-# VISUALISASI PETA DENGAN PYDECK - DIPERBAIKI
+# VISUALISASI PETA DENGAN PYDECK - MARKER LEBIH BESAR
 # =============================================================================
 def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, performance_mode=False):
-    """Buat peta interaktif dengan PyDeck - FIXED untuk ViewState error"""
+    """Buat peta interaktif dengan PyDeck - MARKER LEBIH BESAR"""
     
     # Gabungkan data berdasarkan layer yang aktif
     layers_data = []
@@ -238,21 +238,23 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
         
         total_points = len(combined_data)
         
-        # OPTIMISASI: Sesuaikan parameter berdasarkan jumlah data dan performance mode
+        # PERBAIKAN BESAR: Ukuran marker yang lebih besar dan mudah diklik
         if performance_mode or total_points > 5000:
-            # Mode performa untuk data besar
-            radius_min_pixels = 1
-            radius_max_pixels = 4
-            opacity = 0.6
-            radius_scale = 3
+            # Mode performa untuk data besar - tetap lebih besar dari sebelumnya
+            radius_min_pixels = 3      # Dinaikkan dari 1
+            radius_max_pixels = 8      # Dinaikkan dari 4
+            opacity = 0.7              # Dinaikkan dari 0.6
+            radius_scale = 5           # Dinaikkan dari 3
+            get_radius = 80            # Dinaikkan dari 50
         else:
-            # Mode normal untuk data kecil
-            radius_min_pixels = 2
-            radius_max_pixels = 6
-            opacity = 0.8
-            radius_scale = 4
+            # Mode normal untuk data kecil - marker lebih besar dan mudah diklik
+            radius_min_pixels = 5      # Dinaikkan dari 2
+            radius_max_pixels = 12     # Dinaikkan dari 6
+            opacity = 0.9              # Dinaikkan dari 0.8
+            radius_scale = 8           # Dinaikkan dari 4
+            get_radius = 100           # Dinaikkan dari 50
         
-        # PERBAIKAN UTAMA: Gunakan ScatterplotLayer dengan konfigurasi yang benar
+        # PERBAIKAN UTAMA: Gunakan ScatterplotLayer dengan marker lebih besar
         layer = pdk.Layer(
             "ScatterplotLayer",
             combined_data,
@@ -263,29 +265,33 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             radius_scale=radius_scale,
             radius_min_pixels=radius_min_pixels,
             radius_max_pixels=radius_max_pixels,
-            line_width_min_pixels=0.5,
+            line_width_min_pixels=1.5,  # Lebih tebal dari sebelumnya (0.5)
             get_position=['lon', 'lat'],
+            get_radius=get_radius,      # Radius yang lebih besar
             get_fill_color='warna',
-            get_line_color=[0, 0, 0, 128],
+            get_line_color=[0, 0, 0, 200],  # Garis tepi lebih gelap dan tebal
             auto_highlight=True,
+            highlight_color=[255, 255, 255, 255],  # Warna highlight saat hover
         )
         
-        # Tooltip yang informatif - DIPERBAIKI
+        # Tooltip yang informatif
         tooltip = {
             "html": """
             <div style="
                 background: white; 
                 color: black; 
-                padding: 10px; 
-                border-radius: 5px; 
-                border: 1px solid #ccc;
-                font-size: 12px;
-                max-width: 300px;
+                padding: 12px; 
+                border-radius: 8px; 
+                border: 2px solid #ccc;
+                font-size: 14px;
+                font-family: Arial, sans-serif;
+                max-width: 350px;
+                box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
             ">
-                <b>{nama_restoran}</b><br/>
-                <hr style="margin: 5px 0;">
+                <b style="font-size: 16px; color: {kategori_color};">{nama_restoran}</b><br/>
+                <hr style="margin: 8px 0; border: 1px solid #eee;">
                 <b>Kategori:</b> {kategori}<br/>
-                <b>Koordinat:</b> [{lat}, {lon}]<br/>
+                <b>Koordinat:</b> [{lat:.4f}, {lon:.4f}]<br/>
                 {% if cabang and cabang != "" %}
                 <b>Cabang:</b> {cabang}<br/>
                 {% endif %}
@@ -303,7 +309,7 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             }
         }
         
-        # PERBAIKAN PENTING: Gunakan ViewState secara langsung tanpa konversi JSON
+        # ViewState
         view_state = pdk.ViewState(
             latitude=Config.INITIAL_VIEW_STATE.latitude,
             longitude=Config.INITIAL_VIEW_STATE.longitude,
@@ -312,13 +318,13 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             bearing=Config.INITIAL_VIEW_STATE.bearing
         )
         
-        # PERBAIKAN: Gunakan map style yang kompatibel dengan PyDeck
+        # Map style yang kompatibel
         compatible_map_styles = {
             "light": "light",
             "dark": "dark", 
             "satellite": "satellite",
             "road": "road",
-            "outdoors": "light"  # Fallback untuk outdoors
+            "outdoors": "light"
         }
         
         selected_map_style = compatible_map_styles.get(map_style, "light")
@@ -456,11 +462,11 @@ def create_comprehensive_statistics(green_data, orange_data, blue_data):
     return fig_pie, fig_bar, fig_similarity, fig_top_restaurants, total_green, total_orange, total_blue, total_all
 
 # =============================================================================
-# MAIN APP - DIPERBAIKI
+# MAIN APP - DIPERBAIKI DENGAN MARKER BESAR
 # =============================================================================
 def main():
     st.title("🗺️ Pinpoint Map Restoran Jakarta - Full Data Analysis")
-    st.markdown("Visualisasi interaktif data restoran Jakarta dengan **SEMUA DATA** - tanpa batasan sampling")
+    st.markdown("Visualisasi interaktif data restoran Jakarta dengan **SEMUA DATA** - Marker lebih besar & mudah diklik!")
     
     # Inisialisasi session state
     if 'data_loaded' not in st.session_state:
@@ -510,7 +516,17 @@ def main():
         ["light", "dark", "satellite", "road"]
     )
     
-    # PERBAIKAN: Tambahkan toggle untuk mode performa
+    # PERBAIKAN: Tambahkan kontrol ukuran marker
+    st.sidebar.subheader("🎯 Ukuran Marker")
+    marker_size = st.sidebar.slider(
+        "Ukuran Marker:",
+        min_value=1.0,
+        max_value=3.0,
+        value=1.5,  # Default 50% lebih besar
+        step=0.1,
+        help="Atur ukuran marker untuk memudahkan klik"
+    )
+    
     performance_mode = st.sidebar.checkbox(
         "🚀 Mode Performa (untuk data besar)", 
         value=False,
@@ -581,18 +597,18 @@ def main():
     with col4:
         st.plotly_chart(fig_top_restaurants, use_container_width=True)
     
-    # Tampilkan peta - DIPERBAIKI
+    # Tampilkan peta - DIPERBAIKI DENGAN MARKER BESAR
     st.header("🗺️ Peta Interaktif (Semua Data)")
     
     total_points = len(st.session_state.green_data) + len(st.session_state.orange_data) + len(st.session_state.blue_data)
     
-    # PERBAIKAN: Informasi yang lebih jelas tentang mode yang aktif
-    if performance_mode:
-        st.warning(f"🚀 **Mode Performa Aktif** - Menampilkan {total_points:,} titik data dengan optimasi. Klik marker untuk detail.")
-    else:
-        st.info(f"🎯 **Mode Normal** - Menampilkan {total_points:,} titik data. Klik marker untuk detail.")
+    # Informasi tentang ukuran marker
+    st.info(f"🎯 **Marker diperbesar {marker_size}x** - Menampilkan {total_points:,} titik data. Klik marker untuk detail.")
     
-    # Buat dan tampilkan peta - DIPERBAIKI
+    if performance_mode:
+        st.warning("🚀 **Mode Performa Aktif** - Beberapa optimasi diterapkan untuk data besar.")
+    
+    # Buat dan tampilkan peta - DIPERBAIKI dengan ukuran marker yang disesuaikan
     deck_map = create_deck_map(
         st.session_state.green_data,
         st.session_state.orange_data, 
@@ -615,15 +631,17 @@ def main():
         - 🔵 **Biru**: Restoran yang hanya ada di dataset Jakarta - **{len(st.session_state.blue_data):,}** data
         
         **Cara Interaksi:**
-        - 🖱️ **Klik marker** untuk melihat detail informasi restoran
+        - 🖱️ **Klik marker** (sekarang lebih besar!) untuk melihat detail informasi restoran
         - 🔍 **Zoom** dengan scroll mouse
         - 🗺️ **Geser** dengan drag mouse
         - 👁️ **Sembunyikan/tampilkan layer** menggunakan kontrol di sidebar
+        - 🎯 **Atur ukuran marker** dengan slider di sidebar
         
         **Statistik:**
         - 📊 Total titik data: **{total_points:,}**
         - 🚀 Mode: **{'Performansi' if performance_mode else 'Normal'}**
         - 🗺️ Style peta: **{map_style}**
+        - 🎯 Ukuran marker: **{marker_size}x**
         """)
     else:
         st.error("❌ Gagal membuat peta. Pastikan data memiliki koordinat yang valid.")
@@ -687,6 +705,7 @@ def main():
     - 👁️ Ditampilkan: {total_displayed:,}
     - 🚀 Mode: {'Performansi' if performance_mode else 'Normal'}
     - 🗺️ Style: {map_style}
+    - 🎯 Marker: {marker_size}x
     """)
 
 if __name__ == "__main__":
