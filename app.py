@@ -198,7 +198,7 @@ def load_and_process_data(matched_file, esb_file, jakarta_file):
 # VISUALISASI PETA DENGAN PYDECK - DIPERBAIKI
 # =============================================================================
 def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, performance_mode=False):
-    """Buat peta interaktif dengan PyDeck - FIXED untuk peta hitam"""
+    """Buat peta interaktif dengan PyDeck - FIXED untuk ViewState error"""
     
     # Gabungkan data berdasarkan layer yang aktif
     layers_data = []
@@ -282,10 +282,10 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
                 font-size: 12px;
                 max-width: 300px;
             ">
-                <b style="color: {kategori_color};">{nama_restoran}</b><br/>
+                <b>{nama_restoran}</b><br/>
                 <hr style="margin: 5px 0;">
                 <b>Kategori:</b> {kategori}<br/>
-                <b>Koordinat:</b> [{lat:.4f}, {lon:.4f}]<br/>
+                <b>Koordinat:</b> [{lat}, {lon}]<br/>
                 {% if cabang and cabang != "" %}
                 <b>Cabang:</b> {cabang}<br/>
                 {% endif %}
@@ -303,13 +303,16 @@ def create_deck_map(green_data, orange_data, blue_data, show_layers, map_style, 
             }
         }
         
-        # PERBAIKAN PENTING: Konfigurasi view state dan map style
+        # PERBAIKAN PENTING: Gunakan ViewState secara langsung tanpa konversi JSON
         view_state = pdk.ViewState(
-            **Config.INITIAL_VIEW_STATE.to_json()
+            latitude=Config.INITIAL_VIEW_STATE.latitude,
+            longitude=Config.INITIAL_VIEW_STATE.longitude,
+            zoom=Config.INITIAL_VIEW_STATE.zoom,
+            pitch=Config.INITIAL_VIEW_STATE.pitch,
+            bearing=Config.INITIAL_VIEW_STATE.bearing
         )
         
         # PERBAIKAN: Gunakan map style yang kompatibel dengan PyDeck
-        # PyDeck mendukung: 'light', 'dark', 'road', 'satellite', 'dark_no_labels', etc.
         compatible_map_styles = {
             "light": "light",
             "dark": "dark", 
@@ -488,9 +491,9 @@ def main():
         esb_file = st.sidebar.file_uploader("Data ESB", type=['csv'], key="esb")
         jakarta_file = st.sidebar.file_uploader("Data Jakarta", type=['csv'], key="jakarta")
     else:
-        matched_file = st.sidebar.text_input("Path Data Matched", "/kaggle/input/final-dataset/esb_jakarta_matched_comprehensive.csv")
-        esb_file = st.sidebar.text_input("Path Data ESB", "/kaggle/input/dataset-jakarta-compared/restaurant_esb_baru.csv")
-        jakarta_file = st.sidebar.text_input("Path Data Jakarta", "/kaggle/input/dataset-jakarta-compared/restaurants_jakarta.csv")
+        matched_file = st.sidebar.text_input("Path Data Matched", "esb_jakarta_matched_comprehensive.csv")
+        esb_file = st.sidebar.text_input("Path Data ESB", "restaurant_esb_baru.csv")
+        jakarta_file = st.sidebar.text_input("Path Data Jakarta", "restaurants_jakarta.csv")
     
     # Kontrol layer
     st.sidebar.subheader("👁️ Kontrol Layer")
@@ -535,6 +538,8 @@ def main():
                 
             except Exception as e:
                 st.error(f"❌ Error memuat data: {str(e)}")
+                import traceback
+                st.error(f"Detail error: {traceback.format_exc()}")
                 return
     
     if not st.session_state.get('data_loaded', False):
@@ -593,7 +598,7 @@ def main():
         st.session_state.orange_data, 
         st.session_state.blue_data,
         show_layers,
-        map_style,  # Langsung gunakan string style
+        map_style,
         performance_mode
     )
     
